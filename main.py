@@ -11,9 +11,9 @@ min_particle = []
 
 for h in h_list:
     print(h)
-    gamma = np.eye(1) * 0.1
+    gamma = np.eye(1) * 0.05
     y = np.ones(1)
-    u_eki = eki_discrete(gamma=gamma, h=h, init_shape=(100, 1), y=y, num_sims=100)
+    u_eki = eki_discrete(gamma=gamma, h=h, T=5.0, init_shape=(10, 1), y=y, num_sims=10)
     # only for 1D particles
     max_particle.append(np.amax(u_eki))
     min_particle.append(np.amin(u_eki))
@@ -28,5 +28,5 @@ plt.plot(h_list, max_particle, 'g', label="max")
 plt.plot(h_list, min_particle, 'r', label="min")
 #plt.plot(h_list, sigma_list, 'g')
 plt.xscale("log")
-plt.show()
 plt.savefig("plots.png")
+plt.show()

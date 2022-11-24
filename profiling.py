@@ -17,3 +17,7 @@ def profileit(func):
 def read_profile(file: str):
     pr = pstats.Stats(file)
     pr.sort_stats('time').print_stats(10)
+
+
+if __name__ == "__main__":
+    read_profile("eki_discrete_fixed_randomness.profile")

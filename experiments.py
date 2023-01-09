@@ -1,4 +1,5 @@
-from eki import eki_discrete, get_particle_mean, get_moments
+from eki import eki_discrete
+import helper
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -83,7 +84,7 @@ def ensemble_convergence_1d():
         norms = []
         means = []
         for particles in ensemble:
-            mean = get_particle_mean(particles)
+            mean = helper.get_particle_mean(particles)
             means.append(mean[0])
             norm_sum = 0
             for i in range(len(particles)):
@@ -200,7 +201,7 @@ def ensemble_convergence_2d():
         norms = []
         means = []
         for particles in ensemble:
-            mean = get_particle_mean(particles)
+            mean = helper.get_particle_mean(particles)
             means.append(mean)
             norm_sum = 0
             for i in range(len(particles)):

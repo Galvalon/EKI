@@ -1,7 +1,9 @@
 from typing import List, Tuple
 from collections import namedtuple
+import numpy as np
 import eki
 import config as cfg
+from tqdm import tqdm
 
 
 def linear_interpolation(sims: List, h_target: float) -> List:
@@ -12,8 +14,9 @@ def linear_interpolation(sims: List, h_target: float) -> List:
     :param h_target: target step-size after interpolation
     :return: List of interpolated simulations
     """
+    print("Starting Interpolation")
     new_sims = []
-    for sim in sims:
+    for sim in tqdm(sims):
         if isinstance(sim, dict):
             new_h_dict = dict()
             for key in sim:
@@ -29,9 +32,10 @@ def linear_interpolation(sims: List, h_target: float) -> List:
 
 def interpolate_single_ensemble(sim: Tuple, h_target: float) -> Tuple:
     times, ensemble, corr = sim
-    target_decimals = str(h_target)[::-1].find('.')
+    #target_decimals = str(h_target)[::-1].find('.')
     h = times[1]
-    if not (h / h_target).is_integer():
+    # check if (h mod h_target == 0) but better here
+    if not (h / h_target).as_integer_ratio()[1] == 1:
         raise ValueError("h-values do not fit. Simulation h must be multiple of h_target.")
     if h_target == h:
         return sim
@@ -42,11 +46,11 @@ def interpolate_single_ensemble(sim: Tuple, h_target: float) -> Tuple:
         insert_nr = int(h / h_target)
         for i in range(1, insert_nr):
             # calc new time
-            new_time = round(times[t] + h_target * i, target_decimals)
+            new_time = times[t] + h_target * i
             new_times.append(new_time)
             # linear interpolation for new ensemble member
-            scaling_factor = 1 / (times[t + 1] - times[t])
-            interp = ensemble[t] * (times[t + 1] - new_time) + ensemble[t + 1] * (new_time - times[t])
+            scaling_factor = 1 / float(times[t + 1] - times[t])
+            interp = ensemble[t] * float(times[t + 1] - new_time) + ensemble[t + 1] * float(new_time - times[t])
             new_ensemble.append(interp * scaling_factor)
         # insert bigger grid time
         new_times.append(times[t + 1])
@@ -54,8 +58,18 @@ def interpolate_single_ensemble(sim: Tuple, h_target: float) -> Tuple:
 
     new_corr = []
     for e in new_ensemble:
-        new_corr.append(eki.correlation_matrix(e, cfg.G, "up"))
+        new_corr.append(eki.covariance_matrix(e, cfg.G, "up"))
 
     # save interpolated "simulation"
     Sim = namedtuple('Sim', 't e c')
     return Sim(new_times, new_ensemble, new_corr)
+
+
+def get_particle_mean(u: np.ndarray) -> np.ndarray:
+    """
+    Mean over all particles.
+    :param u:
+    :return:
+    """
+    return u.mean(axis=0)
+

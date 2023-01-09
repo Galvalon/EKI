@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Callable, List, Tuple, Dict, Union
 from scipy.linalg import fractional_matrix_power
+import decimal as d
 import scipy
 from scipy import stats
 import matplotlib.pyplot as plt
@@ -15,17 +16,17 @@ def initial_ensemble(num_particles: int, dim: int, mu: float, sigma: float, rng=
     Define an initial ensemble
     :param num_particles:
     :param dim:
-    :param mu:
-    :param sigma:
+    :param mu: mean
+    :param sigma: variance
     :param rng: random generator
     :return: array with particles as rows
     """
-    return rng.normal(mu, sigma, (num_particles, dim))
+    return rng.multivariate_normal(np.ones(dim)*mu, np.eye(dim)*sigma, num_particles)
 
 
-def correlation_matrix(u: np.ndarray, G: Union[Callable, np.ndarray], idx: str = "up") -> np.ndarray:
+def covariance_matrix(u: np.ndarray, G: Union[Callable, np.ndarray], idx: str = "up") -> np.ndarray:
     """
-    covariance/correlation matrix computation
+    covariance matrix computation
     :param u: ensemble (every row is ensemble member)
     :param G: G or G(u)
     :param idx: "uu", "up" or "pp"
@@ -38,7 +39,7 @@ def correlation_matrix(u: np.ndarray, G: Union[Callable, np.ndarray], idx: str =
         gu = G
     elif type(G) != np.ndarray:
         gu = G(u)
-    # compute correlation
+    # compute covariance
     if idx == "uu" or G is None:
         u_scaled = u - u.mean(axis=0)
         # 1/J sum_j (u_j-mean)^T (u_j-mean)
@@ -55,7 +56,7 @@ def correlation_matrix(u: np.ndarray, G: Union[Callable, np.ndarray], idx: str =
 
 
 @profileit
-def eki_discrete(h_list: List[float]) -> List:
+def eki_discrete(h_list: List[d.Decimal]) -> List:
     """
     Compute the EKI in discrete time of inverse problem y=G(u)+noise.
     ! All matrix multiplications are transposed as ensemble vectors are rows of u !
@@ -69,50 +70,50 @@ def eki_discrete(h_list: List[float]) -> List:
     y_matrix = np.tile(cfg.Y, (cfg.PARTICLES, 1))
     sims = []
     # decimals for times
-    target_decimals = str(h_list[0])[::-1].find('.')
+    #target_decimals = str(h_list[0])[::-1].find('.')
     for _ in tqdm(range(cfg.NUM_SIMS)):
         h_sims = dict()
         for h in h_list:
             N = int(cfg.T / h)
             # return vars
             Sim = namedtuple('Sim', 't e c')
-            corr = []
+            cov = []
             ensembles = []
             times = []
             u_0 = initial_ensemble(num_particles=cfg.PARTICLES, dim=cfg.DIMENSION, mu=cfg.MU, sigma=cfg.SIGMA, rng=rng)
             u_new = u_0
             ensembles.append(u_new)
             for n in range(N):
-                times.append(round(n*h), target_decimals)
+                times.append(n*h)
                 # save old u
                 u_old = u_new
                 # compute G(u) for ensemble
                 gu = cfg.G(u_old)
-                # save correlation
-                corr.append(correlation_matrix(u_old, gu, "up"))
+                # save covariance
+                cov.append(covariance_matrix(u_old, gu, "up"))
                 # create random vectors ~N(0,Id) for ensemble size u.shape[0]
                 random_matrix = rng.multivariate_normal(np.zeros(u_old.shape[1]), np.eye(u_old.shape[1]),
                                                                             u_old.shape[0])
                 scaled_random_matrix = np.matmul(random_matrix, fractional_matrix_power(cfg.GAMMA, 0.5))
                 # compute matrices
-                bracket_matrix = h * correlation_matrix(u_old, gu, "pp") + cfg.GAMMA
-                prematrix = np.matmul(correlation_matrix(u_old, gu, "up"), np.linalg.inv(bracket_matrix))
+                bracket_matrix = float(h) * covariance_matrix(u_old, gu, "pp") + cfg.GAMMA
+                prematrix = np.matmul(covariance_matrix(u_old, gu, "up"), np.linalg.inv(bracket_matrix))
 
-                u_new = u_old + h * np.matmul(y_matrix - gu, prematrix) + np.sqrt(h) * np.matmul(scaled_random_matrix, prematrix)
+                u_new = u_old + float(h) * np.matmul(y_matrix - gu, prematrix) + np.sqrt(float(h)) * np.matmul(scaled_random_matrix, prematrix)
 
                 ensembles.append(u_new)
 
             times.append(N*h)
-            corr.append(correlation_matrix(u_new, cfg.G, "up"))
+            cov.append(covariance_matrix(u_new, cfg.G, "up"))
             # pack for return
-            h_sims[h] = Sim(times, ensembles, corr)
+            h_sims[h] = Sim(times, ensembles, cov)
         # pack sims together
         sims.append(h_sims)
     return sims
 
 
 @profileit
-def eki_discrete_fixed_randomness(h_list: List[float]) -> List:
+def eki_discrete_fixed_randomness(h_list: List[d.Decimal]) -> List:
     """
     Compute the EKI in discrete time of inverse problem y=G(u)+noise.
     For every simulation, the randomness at a specific time is fixed (taken from the randomness of the smallest time steps)
@@ -129,12 +130,12 @@ def eki_discrete_fixed_randomness(h_list: List[float]) -> List:
     # start with smallest h
     h_list.sort()
     # decimals for times
-    target_decimals = str(h_list[0])[::-1].find('.')
+    #target_decimals = str(h_list[0])[::-1].find('.')
     for _ in tqdm(range(cfg.NUM_SIMS)):
         u_0 = initial_ensemble(num_particles=cfg.PARTICLES, dim=cfg.DIMENSION, mu=cfg.MU, sigma=cfg.SIGMA, rng=rng)
         random_dW = dict()
         for n in range(int(cfg.T / h_list[0])):
-            random_dW[round(n*h_list[0], target_decimals)] = rng.multivariate_normal(np.zeros(u_0.shape[1]), np.eye(u_0.shape[1]),
+            random_dW[n*h_list[0]] = rng.multivariate_normal(np.zeros(u_0.shape[1]), np.eye(u_0.shape[1]),
                                                                             u_0.shape[0])
         h_sims = dict()
         for h in h_list:
@@ -142,61 +143,39 @@ def eki_discrete_fixed_randomness(h_list: List[float]) -> List:
             N = int(cfg.T / h)
             # return vars
             Sim = namedtuple('Sim', 't e c')
-            corr = []
+            cov = []
             ensembles = []
             times = []
             ensembles.append(u_new)
             for n in range(N):
-                times.append(round(n*h, target_decimals))
+                times.append(n*h)
                 # save old u
                 u_old = u_new
                 # compute G(u) for ensemble
                 gu = cfg.G(u_old)
-                # save correlation
-                corr.append(correlation_matrix(u_old, gu, "up"))
+                # save covariance
+                cov.append(covariance_matrix(u_old, gu, "up"))
                 # create random vectors ~N(0,Id) for ensemble size u.shape[0]
-                random_matrix = random_dW[round(n*h, target_decimals)]
+                random_matrix = random_dW[n*h]
                 scaled_random_matrix = np.matmul(random_matrix, fractional_matrix_power(cfg.GAMMA, 0.5))
                 # compute matrices
-                bracket_matrix = h * correlation_matrix(u_old, gu, "pp") + cfg.GAMMA
-                prematrix = np.matmul(correlation_matrix(u_old, gu, "up"), np.linalg.inv(bracket_matrix))
+                bracket_matrix = float(h) * covariance_matrix(u_old, gu, "pp") + cfg.GAMMA
+                prematrix = np.matmul(covariance_matrix(u_old, gu, "up"), np.linalg.inv(bracket_matrix))
 
-                u_new = u_old + h * np.matmul(y_matrix - gu, prematrix) + np.sqrt(h) * np.matmul(scaled_random_matrix, prematrix)
+                u_new = u_old + float(h) * np.matmul(y_matrix - gu, prematrix) + np.sqrt(float(h)) * np.matmul(scaled_random_matrix, prematrix)
 
                 ensembles.append(u_new)
 
             times.append(N*h)
-            corr.append(correlation_matrix(u_new, cfg.G, "up"))
+            cov.append(covariance_matrix(u_new, cfg.G, "up"))
             # pack for return
-            h_sims[h] = Sim(times, ensembles, corr)
+            h_sims[h] = Sim(times, ensembles, cov)
         # pack sims together
         sims.append(h_sims)
     return sims
 
 
-def get_particle_mean(u: np.ndarray) -> np.ndarray:
-    """
-    Mean over all particles.
-    :param u:
-    :return:
-    """
-    if len(u.shape) == 2:
-        return u.mean(axis=0)
-    elif len(u.shape) == 3:
-        return u.mean(axis=1)
-
-
-def get_moments(u: np.ndarray) -> Tuple:
-    """
-    Compute moment.
-    :param u:
-    :return:
-    """
-    moments = stats.describe(u, ddof=0)
-    return moments.mean, moments.variance
-
-
 if __name__ == "__main__":
     h = 0.01
 
-    times, ensemble, corr = eki_discrete(h=h)[0]
+    times, ensemble, cov = eki_discrete(h=h)[0]

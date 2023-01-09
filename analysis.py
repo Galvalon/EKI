@@ -1,31 +1,40 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.pyplot import figure
 from operator import add, sub
+import decimal as d
 import math
 import time
 import eki
 import config as cfg
 import helper
 import pandas as pd
+from typing import List
+from tqdm import tqdm
 
 
-def cauchy_analysis():
+def cauchy_analysis(sims: List = None):
     """
     Analysis of approximations via cauchy-sequences.
     Convergence of quadratic mean of the discrete EKI towards the continuous model is proven in theory.
 
+    :param sims: Optional Simulation for multiple analysis functions on a single EKI
     """
-    h_list = [1/2**i for i in range(10)]
-    h_list.sort()
-    print(h_list)
-    sims = eki.eki_discrete_fixed_randomness(h_list=h_list)
-    interp_sims = helper.linear_interpolation(sims, h_list[0])
+    savetime = time.time()
 
+    if sims is None:
+        h_list = [1/2**i for i in range(10)]
+        h_list.sort()
+        print(h_list)
+        sims = eki.eki_discrete_fixed_randomness(h_list=h_list)
+        interp_sims = helper.linear_interpolation(sims, h_list[0])
+    else:
+        interp_sims = sims
+        h_list = list(interp_sims[0].keys())
+
+    print("Computing cauchy errors")
     cauchy_errors = []
-    for h in h_list:
+    for h in tqdm(h_list):
         row_list = [h]
         for h_tilde in h_list:
             particle_diff_norms = []
@@ -44,26 +53,48 @@ def cauchy_analysis():
             row_list.append(mean_sum / cfg.PARTICLES)
         cauchy_errors.append(row_list)
     cauchy_error_frame = pd.DataFrame(cauchy_errors, columns=['h']+h_list)
-    print(cauchy_error_frame)
+    #print(cauchy_error_frame)
 
-    cauchy_error_frame.to_csv("Cauchy_Errors.csv", sep=";")
+    cauchy_error_frame.to_csv(f"plots/cauchy_errors_{savetime}.csv", sep=";")
 
 
-def variance_analysis():
+def variance_analysis(sims: List = None):
     """
     Analysis of mean and variance of the ensemble.
     1. Analysis for each h over time.
     2. Analysis for all h at specific time.
+
+    :param sims: Optional Simulation for multiple analysis functions on a single EKI
     """
     savetime = time.time()
 
-    h_list = [1 / 2 ** i for i in range(10)]
-    h_list.sort()
-    print(h_list)
-    sims = eki.eki_discrete_fixed_randomness(h_list=h_list)
-    interp_sims = helper.linear_interpolation(sims, h_list[0])
+    if sims is None:
+        h_list = [1 / 2 ** i for i in range(10)]
+        h_list.sort()
+        print(h_list)
+        sims = eki.eki_discrete_fixed_randomness(h_list=h_list)
+        interp_sims = helper.linear_interpolation(sims, h_list[0])
+    else:
+        interp_sims = sims
+        h_list = list(interp_sims[0].keys())
 
-    for h in h_list:
+    # plot
+    param_string = f"{cfg.NUM_SIMS} simulations, Gamma={cfg.GAMMA}, y={cfg.Y[0]}, {cfg.PARTICLES} particles, u_0~N({cfg.MU}, {cfg.SIGMA})"
+    fig, axs = plt.subplots(1, 2, figsize=(16, 12), dpi=80)
+    fig.suptitle(f"Variance analysis for 1D particles with G(u)={cfg.G_STRING} \n {param_string}")
+    colormap = plt.get_cmap('viridis')
+    color_list = colormap(np.linspace(0, 1, len(h_list)))
+    custom_lines = []
+    times = interp_sims[0][h_list[0]].t
+    axs[0].set_xlabel("time")
+    axs[0].set_ylabel("mean estimation & standard deviation from mean")
+    axs[1].set_title("Full")
+    axs[1].set_xlabel("time")
+    axs[1].set_ylabel("variance estimation")
+    axs[1].set_title("Zoom")
+
+    print("Computing mean & variance analysis")
+    for h in tqdm(h_list):
         # for every h compute separately
         mus = []
         sigmas = []
@@ -74,7 +105,7 @@ def variance_analysis():
             sim_vars = []
             for ensemble in sim[h].e:
                 # mean and variance in every ensemble
-                mean = eki.get_particle_mean(ensemble)
+                mean = helper.get_particle_mean(ensemble)
                 var = 0
                 for row in ensemble:
                     var += (row-mean)**2
@@ -94,47 +125,46 @@ def variance_analysis():
         mu_high = list(map(add, mu, std_deviation))
         mu_low = list(map(sub, mu, std_deviation))
 
-        # plot
-        param_string = f"Gamma={cfg.GAMMA}, y={cfg.Y[0]}, {cfg.PARTICLES} particles, u_0~N({cfg.MU}, {cfg.SIGMA})"
-        fig, axs = plt.subplots(1, 2, figsize=(16, 12), dpi=80)
-        fig.suptitle(f"Variance analysis for 1D particles with G(u)=arctan(u) & h={h} \n {param_string}")
-        times = interp_sims[0][h_list[0]].t
-        axs[0].set_xlabel("time")
-        axs[0].set_ylabel("mean & variance")
-        axs[1].set_title("Full")
-        axs[0].plot(times, mu, "-b")
-        axs[0].plot(times, mu_low, "-g")
-        axs[0].plot(times, mu_high, "-g")
-        # plot without steep curve at the start
-        axs[1].set_xlabel("time")
-        axs[1].set_ylabel("mean & variance")
-        axs[1].set_title("Zoom")
-        axs[1].plot(times[-450:], mu[-450:], "-b")
-        axs[1].plot(times[-450:], mu_low[-450:], "-g")
-        axs[1].plot(times[-450:], mu_high[-450:], "-g")
-        # save
-        fig.savefig(f"plots/variance_analysis_1D_h={h}_{savetime}.png")
+        # for plot legend
+        custom_lines.append(Line2D([0], [0], color=color_list[h_list.index(h)], lw=4))
+        # plot mean
+        axs[0].plot(times, mu, linestyle="-", color=color_list[h_list.index(h)])
+        axs[0].plot(times, mu_low, linestyle="--", color=color_list[h_list.index(h)])
+        axs[0].plot(times, mu_high, linestyle="--", color=color_list[h_list.index(h)])
+        # plot variance
+        axs[1].plot(times[-450:], mu[-450:], linestyle="-", color=color_list[h_list.index(h)])
+
+    # save
+    fig.legend(custom_lines, [f"h={h}" for h in h_list])
+    fig.savefig(f"plots/variance_analysis_1D_{savetime}.png")
 
 
-def error_analysis():
+def error_analysis(sims: List = None):
     """
-    Analysis of E(t,h) = \E 1/J \sum_j (u-mean)^2 at time T.
+    Analysis of E(t,h) = \E 1/J \sum_j |u-mean|^2 at time T.
     For fixed t, E(t,h)->0 for h->0 .
     Additionally, E(h,t) <= Ct^\delta(h)
+
+    :param sims: Optional Simulation for multiple analysis functions on a single EKI
     """
     savetime = time.time()
 
-    h_list = [1 / 2 ** i for i in range(10)]
-    h_list.sort()
-    print(h_list)
-    sims = eki.eki_discrete_fixed_randomness(h_list=h_list)
-    interp_sims = helper.linear_interpolation(sims, h_list[0])
+    if sims is None:
+        h_list = [1 / 2 ** i for i in range(10)]
+        h_list.sort()
+        print(h_list)
+        sims = eki.eki_discrete_fixed_randomness(h_list=h_list)
+        interp_sims = helper.linear_interpolation(sims, h_list[0])
+    else:
+        interp_sims = sims
+        h_list = list(interp_sims[0].keys())
 
+    print("Computing error analysis")
     errors = []
-    for h in h_list:
+    for h in tqdm(h_list):
         expectance = 0
         for sim in interp_sims:
-            mean = eki.get_particle_mean(sim[h].e[-1])
+            mean = helper.get_particle_mean(sim[h].e[-1])
             particle_mean = 0
             for part in sim[h].e[-1]:
                 particle_mean += np.linalg.norm(part-mean) ** 2
@@ -144,23 +174,86 @@ def error_analysis():
         errors.append(expectance)
 
     # plot
-    param_string = f"Gamma={cfg.GAMMA}, y={cfg.Y[0]}, {cfg.PARTICLES} particles, u_0~N({cfg.MU},{cfg.SIGMA})"
-    fig, axs = plt.subplots(1, 2, figsize=(16, 12), dpi=80)
-    fig.suptitle(f"Error at t={cfg.T} for 1D particles with G(u)=arctan(u) \n {param_string}")
+    param_string = f"{cfg.NUM_SIMS} simulations, Gamma={cfg.GAMMA}, y={cfg.Y[0]}, {cfg.PARTICLES} particles, u_0~N({cfg.MU},{cfg.SIGMA})"
+    fig, axs = plt.subplots(1, 1, figsize=(16, 12), dpi=80)
+    fig.suptitle(f"Error at t={cfg.T} for {cfg.DIMENSION}D particles with G(u)={cfg.G_STRING} \n {param_string}")
     # error
-    axs[0].set_xlabel("h")
-    axs[0].set_ylabel("error")
-    axs[0].plot(h_list, errors, "-b")
-    axs[0].invert_xaxis()
-    # bound
-    axs[1].set_xlabel("h")
-    axs[1].set_ylabel("log(error)")
-    axs[1].set_yscale('log')
-    axs[1].plot(h_list, errors, "-b")
-    axs[1].invert_xaxis()
+    axs.set_xlabel("h")
+    axs.set_ylabel("error")
+    axs.plot(h_list, errors, "-b")
+    axs.invert_xaxis()
     # save
     fig.savefig(f"plots/error_analysis_{savetime}.png")
 
 
+def histogramm_analysis(sims: List = None):
+    """
+        Histogram of simulation results to analyze the probability distribution apart from mean and variance.
+        Only applies to the final time (i.e. the end result), or complexity of the plots would be too huge.
+        Only applies to first and final step size h.
+
+        :param sims: Optional Simulation for multiple analysis functions on a single EKI
+        """
+    savetime = time.time()
+
+    if sims is None:
+        h_list = [1 / 2 ** i for i in range(10)]
+        h_list.sort()
+        print(h_list)
+        sims = eki.eki_discrete_fixed_randomness(h_list=h_list)
+        interp_sims = helper.linear_interpolation(sims, h_list[0])
+    else:
+        interp_sims = sims
+        h_list = list(interp_sims[0].keys())
+
+    # plots
+    param_string = f"{cfg.NUM_SIMS} simulations, Gamma={cfg.GAMMA}, y={cfg.Y[0]}, {cfg.PARTICLES} particles, u_0~N({cfg.MU}, {cfg.SIGMA})"
+    fig, axs = plt.subplots(1, 2, figsize=(16, 12), dpi=80)
+    fig.suptitle(f"Variance analysis at T={cfg.T} for 1D particle means with G(u)={cfg.G_STRING} \n {param_string}")
+    axs[0].set_xlabel("u")
+    axs[0].set_ylabel("#u")
+    axs[0].set_title(f"h={h_list[0]}")
+    axs[1].set_xlabel("u")
+    axs[1].set_ylabel("#u")
+    axs[1].set_title(f"h={h_list[-1]}")
+
+    fig2, axs2 = plt.subplots(1, 2, figsize=(16, 12), dpi=80)
+    fig2.suptitle(f"Variance analysis at T={cfg.T} for all 1D particles with G(u)={cfg.G_STRING} \n {param_string}")
+    axs2[0].set_xlabel("u")
+    axs2[0].set_ylabel("#u")
+    axs2[0].set_title(f"h={h_list[0]}")
+    axs2[1].set_xlabel("u")
+    axs2[1].set_ylabel("#u")
+    axs2[1].set_title(f"h={h_list[-1]}")
+
+    print("Computing histogram analysis")
+    for i in tqdm(range(2)):
+        all_particles = []
+        means = []
+        for sim in interp_sims:
+            means.append(helper.get_particle_mean(sim[h_list[-i]].e[-1]))
+            for part in sim[h_list[-i]].e[-1]:
+                all_particles.append(part)
+        # compute histograms
+        means = [arr[0] for arr in means]
+        axs[i].hist(means, bins=50)
+        all_particles = [arr[0] for arr in all_particles]
+        axs2[i].hist(all_particles, bins=50)
+
+    # save
+    fig.savefig(f"plots/histogram_analysis_means_1D_{savetime}.png")
+    fig2.savefig(f"plots/histogram_analysis_all_1D_{savetime}.png")
+
+
 if __name__ == "__main__":
-    error_analysis()
+    # max acceptable range seems to be lower, because of some rounding errors
+    h_list = [d.Decimal(1 / 2 ** i) for i in range(10)]
+    h_list.sort()
+    print(h_list)
+    sims = eki.eki_discrete_fixed_randomness(h_list=h_list)
+    interp_sims = helper.linear_interpolation(sims, h_list[0])
+
+    cauchy_analysis(interp_sims)
+    variance_analysis(interp_sims)
+    error_analysis(interp_sims)
+    histogramm_analysis(sims)

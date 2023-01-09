@@ -209,40 +209,29 @@ def histogramm_analysis(sims: List = None):
     # plots
     param_string = f"{cfg.NUM_SIMS} simulations, Gamma={cfg.GAMMA}, y={cfg.Y[0]}, {cfg.PARTICLES} particles, u_0~N({cfg.MU}, {cfg.SIGMA})"
     fig, axs = plt.subplots(1, 2, figsize=(16, 12), dpi=80)
-    fig.suptitle(f"Variance analysis at T={cfg.T} for 1D particle means with G(u)={cfg.G_STRING} \n {param_string}")
+    fig.suptitle(f"Histogram analysis at T={cfg.T} and h={h_list[0]} with G(u)={cfg.G_STRING} \n {param_string}")
     axs[0].set_xlabel("u")
     axs[0].set_ylabel("#u")
-    axs[0].set_title(f"h={h_list[0]}")
+    axs[0].set_title(f"particle means")
     axs[1].set_xlabel("u")
     axs[1].set_ylabel("#u")
-    axs[1].set_title(f"h={h_list[-1]}")
-
-    fig2, axs2 = plt.subplots(1, 2, figsize=(16, 12), dpi=80)
-    fig2.suptitle(f"Variance analysis at T={cfg.T} for all 1D particles with G(u)={cfg.G_STRING} \n {param_string}")
-    axs2[0].set_xlabel("u")
-    axs2[0].set_ylabel("#u")
-    axs2[0].set_title(f"h={h_list[0]}")
-    axs2[1].set_xlabel("u")
-    axs2[1].set_ylabel("#u")
-    axs2[1].set_title(f"h={h_list[-1]}")
+    axs[1].set_title(f"all particles")
 
     print("Computing histogram analysis")
-    for i in tqdm(range(2)):
-        all_particles = []
-        means = []
-        for sim in interp_sims:
-            means.append(helper.get_particle_mean(sim[h_list[-i]].e[-1]))
-            for part in sim[h_list[-i]].e[-1]:
-                all_particles.append(part)
-        # compute histograms
-        means = [arr[0] for arr in means]
-        axs[i].hist(means, bins=50)
-        all_particles = [arr[0] for arr in all_particles]
-        axs2[i].hist(all_particles, bins=50)
+    all_particles = []
+    means = []
+    for sim in interp_sims:
+        means.append(helper.get_particle_mean(sim[h_list[0]].e[-1]))
+        for part in sim[h_list[0]].e[-1]:
+            all_particles.append(part)
+    # compute histograms
+    means = [arr[0] for arr in means]
+    axs[0].hist(means, bins=50)
+    all_particles = [arr[0] for arr in all_particles]
+    axs[1].hist(all_particles, bins=50)
 
     # save
-    fig.savefig(f"plots/histogram_analysis_means_1D_{savetime}.png")
-    fig2.savefig(f"plots/histogram_analysis_all_1D_{savetime}.png")
+    fig.savefig(f"plots/histogram_analysis_1D_{savetime}.png")
 
 
 if __name__ == "__main__":
@@ -251,9 +240,9 @@ if __name__ == "__main__":
     h_list.sort()
     print(h_list)
     sims = eki.eki_discrete_fixed_randomness(h_list=h_list)
-    interp_sims = helper.linear_interpolation(sims, h_list[0])
+    #interp_sims = helper.linear_interpolation(sims, h_list[0])
 
-    cauchy_analysis(interp_sims)
-    variance_analysis(interp_sims)
-    error_analysis(interp_sims)
+    #cauchy_analysis(interp_sims)
+    #variance_analysis(interp_sims)
+    #error_analysis(interp_sims)
     histogramm_analysis(sims)

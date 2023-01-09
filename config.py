@@ -2,7 +2,7 @@ import latexify
 import numpy as np
 
 # global parameters for EKI
-MU = 1.
+MU = 0.5
 SIGMA = 1.
 PARTICLES = 5
 DIMENSION = 1
@@ -15,7 +15,7 @@ NUM_SIMS = 1000
 SEED = None
 
 # always modify G_STRING when changing return of G (for correct documentation in outputs)
-G_STRING = "sin(u)*u"
+G_STRING = "0.5*u+1"
 
 
 @latexify.with_latex
@@ -32,14 +32,14 @@ def G(u: np.ndarray) -> np.ndarray:
     #return np.matmul(u, A.transpose())
 
     # for linear G 1D (works!)
-    #return 0.5*u + 1
+    return 0.5*u + 1
 
     # for nonlinear and non-invertible G (does not work! -> why?)
     """
     !!! This does only work for functions with a single solution !!!
     0.5 = sin(u)*u + GAMMA has two possible solutions u
     """
-    return np.multiply(np.sin(u), u)
+    #return np.multiply(np.sin(u), u)
 
     # nonlinear and invertible G (works!)
     #return np.arctan(u)

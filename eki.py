@@ -1,10 +1,7 @@
 import numpy as np
-from typing import Callable, List, Tuple, Dict, Union
+from typing import Callable, List, Union
 from scipy.linalg import fractional_matrix_power
 import decimal as d
-import scipy
-from scipy import stats
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 from profiling import profileit
 from collections import namedtuple
@@ -37,7 +34,7 @@ def covariance_matrix(u: np.ndarray, G: Union[Callable, np.ndarray], idx: str = 
         print("No function G supplied, computing C^uu")
     elif type(G) == np.ndarray:
         gu = G
-    elif type(G) != np.ndarray:
+    else:
         gu = G(u)
     # compute covariance
     if idx == "uu" or G is None:
